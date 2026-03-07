@@ -1,5 +1,6 @@
 import { ReviewStatus } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
+import { fetchRepoContext } from "@/lib/vercel-context";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -45,6 +46,19 @@ export async function POST(request: Request) {
         status: ReviewStatus.DRAFT
       }
     });
+
+    // Fire-and-forget: fetch repo context from Vercel/GitHub
+    fetchRepoContext(parsed.data.targetUrl).then((ctx) => {
+      if (ctx.githubRepo) {
+        prisma.review.update({
+          where: { id: review.id },
+          data: {
+            githubRepo: ctx.githubRepo,
+            repoFileTree: ctx.repoFileTree,
+          },
+        }).catch(console.error);
+      }
+    }).catch(console.error);
 
     return NextResponse.json({ review }, { status: 201 });
   } catch (error) {

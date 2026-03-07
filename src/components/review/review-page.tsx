@@ -57,7 +57,20 @@ export function ReviewPage({ id }: { id: string }) {
       annotationCounter.current += 1;
       const { annotation } = await api<{ annotation: ReviewAnnotation }>("/api/annotations", {
         method: "POST",
-        body: JSON.stringify({ reviewId: id, ...input, order: annotationCounter.current }),
+        body: JSON.stringify({
+          reviewId: id,
+          type: input.type,
+          position: {
+            x: input.positionX,
+            y: input.positionY,
+            scrollY: input.scrollY,
+            viewportWidth: input.viewportWidth,
+            viewportHeight: input.viewportHeight,
+            elementSelector: input.elementSelector,
+          },
+          comment: input.comment,
+          order: annotationCounter.current,
+        }),
       });
       setAnnotations((prev) => [...prev, annotation]);
       return annotation;

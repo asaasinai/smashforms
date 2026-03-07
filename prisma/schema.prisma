@@ -14,12 +14,6 @@ enum ReviewStatus {
   COMPLETED
 }
 
-enum AnnotationType {
-  PIN
-  HIGHLIGHT
-  DRAW
-}
-
 model Review {
   id              String       @id @default(cuid())
   targetUrl       String
@@ -29,7 +23,7 @@ model Review {
   repoFileTree    Json?
   devEmail        String?
   status          ReviewStatus @default(DRAFT)
-  annotations     Annotation[]
+  screenshots     Screenshot[]
   devSpecs        DevSpec[]
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
@@ -37,19 +31,14 @@ model Review {
   @@index([status])
 }
 
-model Annotation {
+model Screenshot {
   id              String         @id @default(cuid())
   reviewId        String
   review          Review         @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-  type            AnnotationType
-  positionX       Float
-  positionY       Float
-  scrollY         Float          @default(0)
-  viewportWidth   Int            @default(1440)
-  viewportHeight  Int            @default(900)
-  elementSelector String?
-  comment         String?
-  aiFollowups     Json?
+  imageData       String         @db.Text
+  notes           String?
+  conversation    Json?
+  lockedSpec      String?
   order           Int            @default(0)
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt

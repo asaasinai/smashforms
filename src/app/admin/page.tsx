@@ -13,7 +13,7 @@ async function AdminContent() {
   const reviews = await prisma.review.findMany({
     orderBy: { createdAt: "desc" },
     include: {
-      annotations: { orderBy: { order: "asc" } },
+      screenshots: { orderBy: { order: "asc" } },
       devSpecs: { orderBy: { createdAt: "desc" }, take: 1 },
     },
   });
@@ -38,32 +38,45 @@ async function AdminContent() {
                   </p>
                 </div>
                 <span className="rounded-full bg-violet-900/40 px-3 py-1 text-xs font-medium text-violet-200">
-                  {review.annotations.length} annotation{review.annotations.length === 1 ? "" : "s"}
+                  {review.screenshots.length} screenshot{review.screenshots.length === 1 ? "" : "s"}
                 </span>
               </div>
 
-              {review.annotations.length > 0 && (
+              {review.screenshots.length > 0 && (
                 <div className="mt-4 space-y-3">
-                  {review.annotations.map((ann, i) => (
-                    <div key={ann.id} className="rounded-lg border border-zinc-800 bg-black/30 p-3">
+                  {review.screenshots.map((shot, i) => (
+                    <div key={shot.id} className="rounded-lg border border-zinc-800 bg-black/30 p-3">
                       <div className="flex items-center gap-2">
                         <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white">
-                          {ann.order || i + 1}
+                          {shot.order || i + 1}
                         </span>
-                        <span className="text-xs font-medium text-zinc-300">{ann.type}</span>
-                        <span className="text-xs text-zinc-500">
-                          ({ann.positionX.toFixed(0)}%, {ann.positionY.toFixed(0)}%) scrollY={ann.scrollY.toFixed(0)}
+                        <span className="text-xs font-medium text-zinc-300">Screenshot #{i + 1}</span>
+                        <span className="ml-auto text-xs text-zinc-600">
+                          {new Date(shot.createdAt).toLocaleString()}
                         </span>
-                        <span className="ml-auto text-xs text-zinc-600">{new Date(ann.createdAt).toLocaleString()}</span>
                       </div>
-                      {ann.comment && (
-                        <p className="mt-2 text-sm text-zinc-200">{ann.comment}</p>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={shot.imageData}
+                        alt={`Screenshot ${i + 1}`}
+                        className="mt-2 h-32 w-full rounded border border-zinc-800 object-cover"
+                      />
+                      {shot.notes && (
+                        <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-200">{shot.notes}</p>
                       )}
-                      {ann.aiFollowups && (
+                      {shot.conversation && (
                         <div className="mt-2 rounded border border-zinc-700 bg-zinc-900/50 p-2">
-                          <p className="text-[10px] uppercase tracking-wider text-violet-400">AI Follow-ups</p>
+                          <p className="text-[10px] uppercase tracking-wider text-violet-400">Conversation</p>
                           <pre className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap text-xs text-zinc-400">
-                            {JSON.stringify(ann.aiFollowups, null, 2)}
+                            {JSON.stringify(shot.conversation, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                      {shot.lockedSpec && (
+                        <div className="mt-2 rounded border border-zinc-700 bg-zinc-900/50 p-2">
+                          <p className="text-[10px] uppercase tracking-wider text-violet-400">Locked Spec</p>
+                          <pre className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap text-xs text-zinc-300">
+                            {shot.lockedSpec}
                           </pre>
                         </div>
                       )}

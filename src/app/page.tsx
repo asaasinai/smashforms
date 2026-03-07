@@ -17,7 +17,6 @@ type Review = {
 export default function HomePage() {
   const router = useRouter();
   const [targetUrl, setTargetUrl] = useState("");
-  const [devEmail, setDevEmail] = useState("");
   const [title, setTitle] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +55,6 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           targetUrl,
-          devEmail: devEmail || undefined,
           title: title || undefined
         })
       });
@@ -90,27 +88,20 @@ export default function HomePage() {
           ⚡ SmashForms
         </p>
         <h1 className="max-w-3xl text-4xl font-semibold leading-tight text-white md:text-5xl">
-          Get actionable feedback on your Vercel previews
+          Screenshot-first website feedback that becomes build-ready specs
         </h1>
         <p className="mt-4 max-w-2xl text-base text-[rgb(var(--muted))]">
-          Collect precise annotations, organize feedback, and convert review rounds into developer-ready specs.
+          Capture page states as you scroll, describe what should change, and let AI turn feedback into precise implementation guidance.
         </p>
 
-        <form onSubmit={handleSubmit} className="mt-8 grid gap-4 md:grid-cols-12">
+        <form onSubmit={handleSubmit} className="mt-8 grid gap-4 md:grid-cols-8">
           <input
             required
             type="url"
             value={targetUrl}
             onChange={(event) => setTargetUrl(event.target.value)}
             placeholder="https://preview-your-app.vercel.app"
-            className="md:col-span-6 rounded-xl border border-[rgb(var(--border))] bg-black/20 px-4 py-3 text-sm text-white placeholder:text-[rgb(var(--muted))] outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-700/50"
-          />
-          <input
-            type="email"
-            value={devEmail}
-            onChange={(event) => setDevEmail(event.target.value)}
-            placeholder="dev@company.com (optional)"
-            className="md:col-span-3 rounded-xl border border-[rgb(var(--border))] bg-black/20 px-4 py-3 text-sm text-white placeholder:text-[rgb(var(--muted))] outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-700/50"
+            className="md:col-span-5 rounded-xl border border-[rgb(var(--border))] bg-black/20 px-4 py-3 text-sm text-white placeholder:text-[rgb(var(--muted))] outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-700/50"
           />
           <input
             type="text"
@@ -122,7 +113,7 @@ export default function HomePage() {
           <button
             type="submit"
             disabled={submitting}
-            className="md:col-span-12 inline-flex items-center justify-center gap-2 rounded-xl bg-accent-600 px-5 py-3 text-sm font-semibold text-[rgb(var(--accent-foreground))] transition hover:bg-accent-500 disabled:cursor-not-allowed disabled:opacity-70"
+            className="md:col-span-8 inline-flex items-center justify-center gap-2 rounded-xl bg-accent-600 px-5 py-3 text-sm font-semibold text-[rgb(var(--accent-foreground))] transition hover:bg-accent-500 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {submitting ? (
               <>
@@ -130,7 +121,7 @@ export default function HomePage() {
                 Creating Review...
               </>
             ) : (
-              "Create Review"
+              "Start Review"
             )}
           </button>
         </form>
@@ -142,8 +133,8 @@ export default function HomePage() {
         <div className="mt-4 grid gap-4 md:grid-cols-3">
           {[
             "Paste your preview URL and start a review session instantly.",
-            "Capture comments and visual annotations where issues happen.",
-            "Ship feedback as structured, developer-ready implementation specs."
+            "Capture screenshots while scrolling, then add raw notes to each frame.",
+            "Use AI chat per screenshot to clarify requirements and lock exact specs."
           ].map((step, index) => (
             <article
               key={step}

@@ -22,9 +22,8 @@ export async function GET(_: Request, { params }: RouteContext) {
     const review = await prisma.review.findUnique({
       where: { id: params.id },
       include: {
-        annotations: {
-          orderBy: { createdAt: "asc" }
-        }
+        screenshots: { orderBy: { order: "asc" } },
+        devSpecs: { orderBy: { createdAt: "desc" }, take: 1 },
       }
     });
 

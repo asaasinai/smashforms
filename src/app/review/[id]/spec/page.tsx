@@ -28,7 +28,7 @@ export default async function SpecPage({ params }: { params: Promise<{ id: strin
     where: { id },
     include: {
       devSpecs: { orderBy: { createdAt: "desc" }, take: 1 },
-      _count: { select: { annotations: true } },
+      _count: { select: { screenshots: true } },
     },
   });
 
@@ -57,9 +57,9 @@ export default async function SpecPage({ params }: { params: Promise<{ id: strin
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-8 text-center">
           <p className="text-zinc-400">No spec generated yet.</p>
           <p className="mt-2 text-sm text-zinc-500">
-            {review._count.annotations === 0
-              ? "Add annotations first, then submit the review."
-              : "Submit the review to generate a dev spec."}
+            {review._count.screenshots === 0
+              ? "Capture screenshots first, then lock specs."
+              : "Lock screenshot specs and generate the full review spec."}
           </p>
         </div>
       ) : (

@@ -54,7 +54,7 @@ export async function POST(request: Request) {
           where: { id: review.id },
           data: {
             githubRepo: ctx.githubRepo,
-            repoFileTree: ctx.repoFileTree,
+            repoFileTree: ctx.repoFileTree ?? undefined,
           },
         }).catch(console.error);
       }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(request: Request) {
@@ -69,14 +70,14 @@ Generate a structured dev spec. Return ONLY valid JSON with this shape:
     });
 
     const text = response.content[0]?.type === "text" ? response.content[0].text : "{}";
-    let specJson: unknown = {};
+    let specJson: Prisma.InputJsonValue = {};
     let specMarkdown = text;
 
     try {
-      specJson = JSON.parse(text) as object;
-      specMarkdown = (specJson as Record<string, unknown>).markdown as string ?? text;
+      specJson = JSON.parse(text) as Prisma.InputJsonValue;
+      specMarkdown = (specJson as Record<string, string>).markdown ?? text;
     } catch {
-      specJson = { raw: text } as object;
+      specJson = { raw: text };
     }
 
     const devSpec = await prisma.devSpec.create({

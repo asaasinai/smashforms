@@ -23,7 +23,7 @@ const config: runtime.GetPrismaClientConfig = {
       "value": "prisma-client"
     },
     "output": {
-      "value": "/workspace/src/generated/prisma",
+      "value": "/tmp/smashforms/src/generated/prisma",
       "fromEnvVar": null
     },
     "config": {
@@ -37,7 +37,7 @@ const config: runtime.GetPrismaClientConfig = {
       }
     ],
     "previewFeatures": [],
-    "sourceFilePath": "/workspace/prisma/schema.prisma",
+    "sourceFilePath": "/tmp/smashforms/prisma/schema.prisma",
     "isCustomOutput": true
   },
   "relativePath": "../../../prisma",

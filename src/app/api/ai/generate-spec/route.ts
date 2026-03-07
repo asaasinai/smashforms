@@ -69,14 +69,14 @@ Generate a structured dev spec. Return ONLY valid JSON with this shape:
     });
 
     const text = response.content[0]?.type === "text" ? response.content[0].text : "{}";
-    let specJson: Record<string, unknown> = {};
+    let specJson: unknown = {};
     let specMarkdown = text;
 
     try {
-      specJson = JSON.parse(text);
-      specMarkdown = (specJson.markdown as string) ?? text;
+      specJson = JSON.parse(text) as object;
+      specMarkdown = (specJson as Record<string, unknown>).markdown as string ?? text;
     } catch {
-      specJson = { raw: text };
+      specJson = { raw: text } as object;
     }
 
     const devSpec = await prisma.devSpec.create({

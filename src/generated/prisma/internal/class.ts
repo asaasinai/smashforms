@@ -34,6 +34,10 @@ const config: runtime.GetPrismaClientConfig = {
         "fromEnvVar": null,
         "value": "debian-openssl-3.0.x",
         "native": true
+      },
+      {
+        "fromEnvVar": null,
+        "value": "rhel-openssl-3.0.x"
       }
     ],
     "previewFeatures": [],
@@ -56,8 +60,8 @@ const config: runtime.GetPrismaClientConfig = {
       }
     }
   },
-  "inlineSchema": "generator client {\n  provider = \"prisma-client\"\n  output   = \"../src/generated/prisma\"\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\nenum ReviewStatus {\n  DRAFT\n  ACTIVE\n  SUBMITTED\n  COMPLETED\n}\n\nenum AnnotationType {\n  PIN\n  HIGHLIGHT\n  DRAW\n}\n\nmodel Review {\n  id              String       @id @default(cuid())\n  targetUrl       String\n  title           String?\n  vercelProjectId String?\n  githubRepo      String?\n  repoFileTree    Json?\n  devEmail        String?\n  status          ReviewStatus @default(DRAFT)\n  annotations     Annotation[]\n  devSpecs        DevSpec[]\n  createdAt       DateTime     @default(now())\n  updatedAt       DateTime     @updatedAt\n\n  @@index([status])\n}\n\nmodel Annotation {\n  id              String         @id @default(cuid())\n  reviewId        String\n  review          Review         @relation(fields: [reviewId], references: [id], onDelete: Cascade)\n  type            AnnotationType\n  positionX       Float\n  positionY       Float\n  scrollY         Float          @default(0)\n  viewportWidth   Int            @default(1440)\n  viewportHeight  Int            @default(900)\n  elementSelector String?\n  comment         String?\n  aiFollowups     Json?\n  order           Int            @default(0)\n  createdAt       DateTime       @default(now())\n  updatedAt       DateTime       @updatedAt\n\n  @@index([reviewId])\n}\n\nmodel DevSpec {\n  id           String    @id @default(cuid())\n  reviewId     String\n  review       Review    @relation(fields: [reviewId], references: [id], onDelete: Cascade)\n  specMarkdown String\n  specJson     Json?\n  emailedAt    DateTime?\n  createdAt    DateTime  @default(now())\n\n  @@index([reviewId])\n}\n",
-  "inlineSchemaHash": "33712e7cfe5a2d1e3d7b3c7aa90162e47fd25ab0f9ce89e16ea19a79e04fdec6",
+  "inlineSchema": "generator client {\n  provider      = \"prisma-client\"\n  binaryTargets = [\"native\", \"rhel-openssl-3.0.x\"]\n  output        = \"../src/generated/prisma\"\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\nenum ReviewStatus {\n  DRAFT\n  ACTIVE\n  SUBMITTED\n  COMPLETED\n}\n\nenum AnnotationType {\n  PIN\n  HIGHLIGHT\n  DRAW\n}\n\nmodel Review {\n  id              String       @id @default(cuid())\n  targetUrl       String\n  title           String?\n  vercelProjectId String?\n  githubRepo      String?\n  repoFileTree    Json?\n  devEmail        String?\n  status          ReviewStatus @default(DRAFT)\n  annotations     Annotation[]\n  devSpecs        DevSpec[]\n  createdAt       DateTime     @default(now())\n  updatedAt       DateTime     @updatedAt\n\n  @@index([status])\n}\n\nmodel Annotation {\n  id              String         @id @default(cuid())\n  reviewId        String\n  review          Review         @relation(fields: [reviewId], references: [id], onDelete: Cascade)\n  type            AnnotationType\n  positionX       Float\n  positionY       Float\n  scrollY         Float          @default(0)\n  viewportWidth   Int            @default(1440)\n  viewportHeight  Int            @default(900)\n  elementSelector String?\n  comment         String?\n  aiFollowups     Json?\n  order           Int            @default(0)\n  createdAt       DateTime       @default(now())\n  updatedAt       DateTime       @updatedAt\n\n  @@index([reviewId])\n}\n\nmodel DevSpec {\n  id           String    @id @default(cuid())\n  reviewId     String\n  review       Review    @relation(fields: [reviewId], references: [id], onDelete: Cascade)\n  specMarkdown String\n  specJson     Json?\n  emailedAt    DateTime?\n  createdAt    DateTime  @default(now())\n\n  @@index([reviewId])\n}\n",
+  "inlineSchemaHash": "18a9f4da6b4c96880337ad0494c8cd13e462646864140ad1774cbb96e1d650c2",
   "copyEngine": true,
   "runtimeDataModel": {
     "models": {},

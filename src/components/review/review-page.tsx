@@ -8,231 +8,187 @@ import { FloatingToolbar } from "./floating-toolbar";
 import { IframeOverlay } from "./iframe-overlay";
 import type { AnnotationTool, CreateAnnotationInput, ReviewAnnotation, ReviewRecord } from "./types";
 
-type ReviewPageProps = {
-  reviewId: string;
-};
+type JumpRequest = { annotationId: string; nonce: number };
+type AiMessage = { role: "user" | "assistant"; content: string };
 
-type ReviewResponse = {
-  review: ReviewRecord;
-};
-
-type AnnotationResponse = {
-  annotation: ReviewAnnotation;
-};
-
-function sortAnnotations(annotations: ReviewAnnotation[]) {
-  return [...annotations].sort((left, right) => {
-    if (left.order !== right.order) {
-      return left.order - right.order;
-    }
-    return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
-  });
-}
-
-export function ReviewPage({ reviewId }: ReviewPageProps) {
+export function ReviewPage({ id }: { id: string }) {
   const [review, setReview] = useState<ReviewRecord | null>(null);
   const [annotations, setAnnotations] = useState<ReviewAnnotation[]>([]);
   const [activeTool, setActiveTool] = useState<AnnotationTool>("none");
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
-  const [jumpRequest, setJumpRequest] = useState<{ annotationId: string; nonce: number } | null>(null);
+  const [jumpRequest, setJumpRequest] = useState<JumpRequest | null>(null);
   const [pulsePinId, setPulsePinId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const annotationsRef = useRef<ReviewAnnotation[]>([]);
+  const [currentSection, setCurrentSection] = useState(0);
+  const annotationCounter = useRef(0);
 
   useEffect(() => {
-    const loadReview = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const payload = await api<ReviewResponse>(`/api/reviews/${reviewId}`);
-        setReview(payload.review);
-        setAnnotations(sortAnnotations(payload.review.annotations));
-      } catch (loadError) {
-        console.error(loadError);
-        setError(loadError instanceof Error ? loadError.message : "Failed to load review");
-      } finally {
-        setLoading(false);
+    api<{ review: ReviewRecord }>(`/api/reviews/${id}`)
+      .then(({ review: r }) => {
+        setReview(r);
+        setAnnotations(r.annotations ?? []);
+        annotationCounter.current = r.annotations?.length ?? 0;
+      })
+      .catch((err) => setError(`Failed to load review: ${String(err)}`));
+  }, [id]);
+
+  // Scroll tracking for section indicator
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      const data = e.data;
+      if (data && typeof data === "object" && (data as { type?: string }).type === "smashforms-scroll") {
+        const scrollY = (data as { scrollY: number }).scrollY || 0;
+        setCurrentSection(Math.floor(scrollY / 900));
       }
     };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
 
-    void loadReview();
-  }, [reviewId]);
+  const toggleTool = (tool: Exclude<AnnotationTool, "none">) => {
+    setActiveTool((prev) => (prev === tool ? "none" : tool));
+  };
 
-  useEffect(() => {
-    if (!pulsePinId) {
-      return;
-    }
-
-    const timeout = window.setTimeout(() => setPulsePinId(null), 1800);
-    return () => window.clearTimeout(timeout);
-  }, [pulsePinId]);
-
-  useEffect(() => {
-    annotationsRef.current = annotations;
-  }, [annotations]);
+  const setTool = (tool: AnnotationTool) => setActiveTool(tool);
 
   const createAnnotation = async (input: CreateAnnotationInput): Promise<ReviewAnnotation | null> => {
     try {
-      setError(null);
-      const payload = await api<AnnotationResponse>("/api/annotations", {
+      annotationCounter.current += 1;
+      const { annotation } = await api<{ annotation: ReviewAnnotation }>("/api/annotations", {
         method: "POST",
-        body: JSON.stringify({
-          reviewId,
-          type: input.type,
-          position: {
-            x: input.positionX,
-            y: input.positionY,
-            scrollY: input.scrollY,
-            viewportWidth: input.viewportWidth,
-            viewportHeight: input.viewportHeight,
-            elementSelector: input.elementSelector
-          },
-          comment: input.comment,
-          order:
-            annotationsRef.current.reduce((max, annotation, index) => {
-              const value = annotation.order > 0 ? annotation.order : index + 1;
-              return Math.max(max, value);
-            }, 0) + 1
-        })
+        body: JSON.stringify({ reviewId: id, ...input, order: annotationCounter.current }),
       });
-
-      setAnnotations((previous) => sortAnnotations([...previous, payload.annotation]));
-      if (payload.annotation.type === "PIN") {
-        setPulsePinId(payload.annotation.id);
-      }
-
-      return payload.annotation;
-    } catch (createError) {
-      console.error(createError);
-      setError(createError instanceof Error ? createError.message : "Failed to create annotation");
+      setAnnotations((prev) => [...prev, annotation]);
+      return annotation;
+    } catch (err) {
+      setError(`Failed to create annotation: ${String(err)}`);
       return null;
     }
   };
 
-  const updateAnnotationComment = async (annotationId: string, comment: string | null) => {
-    setError(null);
-    await api<AnnotationResponse>(`/api/annotations/${annotationId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ comment })
-    });
-
-    setAnnotations((previous) =>
-      previous.map((annotation) =>
-        annotation.id === annotationId ? { ...annotation, comment } : annotation
-      )
-    );
-  };
-
-  const deleteAnnotation = async (annotationId: string) => {
-    setError(null);
-    await api<{ success: true }>(`/api/annotations/${annotationId}`, {
-      method: "DELETE"
-    });
-
-    setAnnotations((previous) => previous.filter((annotation) => annotation.id !== annotationId));
-    if (selectedAnnotationId === annotationId) {
-      setSelectedAnnotationId(null);
+  const updateComment = async (annotationId: string, comment: string | null) => {
+    try {
+      const { annotation } = await api<{ annotation: ReviewAnnotation }>(`/api/annotations/${annotationId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ comment }),
+      });
+      setAnnotations((prev) => prev.map((a) => (a.id === annotationId ? { ...a, ...annotation } : a)));
+    } catch (err) {
+      setError(`Failed to update: ${String(err)}`);
     }
   };
 
-  const handleSubmitFeedback = async () => {
-    setSubmitting(true);
-    setError(null);
+  const deleteAnnotation = async (annotationId: string) => {
     try {
-      const payload = await api<{ review: { status: ReviewRecord["status"] } }>("/api/webhook/submit", {
-        method: "POST",
-        body: JSON.stringify({ reviewId })
-      });
+      await api(`/api/annotations/${annotationId}`, { method: "DELETE" });
+      setAnnotations((prev) => prev.filter((a) => a.id !== annotationId));
+      if (selectedAnnotationId === annotationId) setSelectedAnnotationId(null);
+    } catch (err) {
+      setError(`Failed to delete: ${String(err)}`);
+    }
+  };
 
-      setReview((previous) => (previous ? { ...previous, status: payload.review.status } : previous));
-      setActiveTool("none");
-    } catch (submitError) {
-      console.error(submitError);
-      setError(submitError instanceof Error ? submitError.message : "Failed to submit feedback");
+  // Update 2: Undo last annotation
+  const undoLast = async () => {
+    if (annotations.length === 0) return;
+    const last = annotations[annotations.length - 1];
+    await deleteAnnotation(last.id);
+  };
+
+  // Update 5: Trigger AI followup with conversation history
+  const triggerAiFollowup = async (annotationId: string, messages: AiMessage[]) => {
+    if (!review) return;
+    try {
+      const { messages: updatedMessages } = await api<{ messages: AiMessage[] }>("/api/ai/followup", {
+        method: "POST",
+        body: JSON.stringify({ annotationId, reviewId: id, messages }),
+      });
+      setAnnotations((prev) =>
+        prev.map((a) => (a.id === annotationId ? { ...a, aiFollowups: updatedMessages } : a))
+      );
+    } catch (err) {
+      console.error("AI followup error:", err);
+    }
+  };
+
+  const selectAnnotation = (annotationId: string) => {
+    setSelectedAnnotationId(annotationId);
+    setJumpRequest({ annotationId, nonce: Date.now() });
+    setPulsePinId(annotationId);
+    setTimeout(() => setPulsePinId(null), 1200);
+  };
+
+  const submitFeedback = async () => {
+    if (!review || annotations.length === 0) return;
+    setSubmitting(true);
+    try {
+      await api("/api/webhook/submit", { method: "POST", body: JSON.stringify({ reviewId: id }) });
+      setReview((prev) => (prev ? { ...prev, status: "COMPLETED" } : prev));
+    } catch (err) {
+      setError(`Submit failed: ${String(err)}`);
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (loading) {
-    return (
-      <main className="flex min-h-screen items-center justify-center px-6">
-        <p className="text-sm text-[rgb(var(--muted))]">Loading review...</p>
-      </main>
-    );
-  }
-
   if (!review) {
     return (
-      <main className="flex min-h-screen items-center justify-center px-6">
-        <p className="text-sm text-red-300">{error ?? "Review not found."}</p>
+      <main className="flex min-h-screen items-center justify-center">
+        <p className="text-sm text-[rgb(var(--muted))]">Loading review…</p>
       </main>
     );
   }
 
   return (
-    <main className="flex h-screen flex-col bg-[rgb(var(--background))]">
-      <header className="flex items-center justify-between border-b border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-6 py-4">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-300">SmashForms</p>
-          <h1 className="truncate text-lg font-semibold text-white">
-            {review.title?.trim() || "Untitled review"}
-          </h1>
-          <p className="truncate text-xs text-[rgb(var(--muted))]">{review.targetUrl}</p>
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="rounded-full border border-violet-700/60 bg-violet-900/30 px-3 py-1 text-xs font-medium text-violet-200">
-            {review.status}
-          </span>
-          <Link
-            href={`/review/${review.id}/spec`}
-            className="text-sm text-violet-300 transition hover:text-violet-200"
-          >
-            Dev Spec
-          </Link>
-        </div>
+    <main className="flex h-screen flex-col bg-[rgb(var(--surface))]">
+      {/* Header bar */}
+      <header className="flex shrink-0 items-center gap-4 border-b border-[rgb(var(--border))] bg-[rgb(var(--surface-2))] px-4 py-2">
+        <Link href="/" className="text-sm font-semibold text-violet-400">⚡ SmashForms</Link>
+        <span className="text-xs text-[rgb(var(--muted))]">{review.title || review.targetUrl}</span>
+        <span className="ml-auto rounded bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">{review.status}</span>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_360px] pb-24">
-        <section className="min-h-0">
-          <IframeOverlay
-            targetUrl={review.targetUrl}
-            annotations={annotations}
-            activeTool={activeTool}
-            selectedAnnotationId={selectedAnnotationId}
-            jumpRequest={jumpRequest}
-            pulsePinId={pulsePinId}
-            onCreateAnnotation={createAnnotation}
-            onUpdateComment={updateAnnotationComment}
-            onDeleteAnnotation={deleteAnnotation}
-            onSelectAnnotation={setSelectedAnnotationId}
-          />
-        </section>
-
+      {/* Body */}
+      <div className="flex flex-1 overflow-hidden">
+        <IframeOverlay
+          targetUrl={review.targetUrl}
+          annotations={annotations}
+          activeTool={activeTool}
+          selectedAnnotationId={selectedAnnotationId}
+          jumpRequest={jumpRequest}
+          pulsePinId={pulsePinId}
+          onCreateAnnotation={createAnnotation}
+          onUpdateComment={updateComment}
+          onDeleteAnnotation={deleteAnnotation}
+          onSelectAnnotation={selectAnnotation}
+        />
         <AnnotationSidebar
           annotations={annotations}
           selectedAnnotationId={selectedAnnotationId}
-          onSelectAnnotation={(annotationId) => {
-            setSelectedAnnotationId(annotationId);
-            setJumpRequest({ annotationId, nonce: Date.now() });
-          }}
-          onUpdateComment={updateAnnotationComment}
+          onSelectAnnotation={selectAnnotation}
+          onUpdateComment={updateComment}
           onDeleteAnnotation={deleteAnnotation}
+          onTriggerAiFollowup={triggerAiFollowup}
+          currentSection={currentSection}
         />
       </div>
 
+      {/* Toolbar */}
       <FloatingToolbar
         activeTool={activeTool}
-        onToggleTool={(tool) => setActiveTool((previous) => (previous === tool ? "none" : tool))}
-        onSubmitFeedback={handleSubmitFeedback}
+        onToggleTool={toggleTool}
+        onSetTool={setTool}
+        onSubmitFeedback={submitFeedback}
+        onUndoLast={undoLast}
+        canUndo={annotations.length > 0}
         submitting={submitting}
       />
 
       {error ? (
         <div className="pointer-events-none fixed right-4 top-4 z-50 rounded-lg border border-red-500/40 bg-red-900/60 px-3 py-2 text-sm text-red-100 shadow-lg">
           {error}
+          <button onClick={() => setError(null)} className="ml-2 text-red-300 hover:text-white">✕</button>
         </div>
       ) : null}
     </main>

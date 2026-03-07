@@ -58,20 +58,14 @@ function buildRect(start: Point, current: Point): HighlightShape {
     x: Math.min(start.x, current.x),
     y: Math.min(start.y, current.y),
     width: Math.abs(start.x - current.x),
-    height: Math.abs(start.y - current.y)
+    height: Math.abs(start.y - current.y),
   };
 }
 
 function parseShapeData(elementSelector: string | null): ShapeData | null {
-  if (!elementSelector) {
-    return null;
-  }
-
+  if (!elementSelector) return null;
   try {
-    const parsed = JSON.parse(elementSelector) as Partial<ShapeData> & {
-      kind?: string;
-    };
-
+    const parsed = JSON.parse(elementSelector) as Partial<ShapeData> & { kind?: string };
     if (
       parsed.kind === "highlight" &&
       typeof parsed.x === "number" &&
@@ -79,43 +73,28 @@ function parseShapeData(elementSelector: string | null): ShapeData | null {
       typeof parsed.width === "number" &&
       typeof parsed.height === "number"
     ) {
-      return {
-        kind: "highlight",
-        x: parsed.x,
-        y: parsed.y,
-        width: parsed.width,
-        height: parsed.height
-      };
+      return { kind: "highlight", x: parsed.x, y: parsed.y, width: parsed.width, height: parsed.height };
     }
-
     if (
       parsed.kind === "draw" &&
       Array.isArray(parsed.points) &&
-      parsed.points.every(
-        (point) =>
-          point &&
-          typeof point === "object" &&
-          typeof point.x === "number" &&
-          typeof point.y === "number"
-      )
+      parsed.points.every((p: unknown) => p && typeof p === "object" && typeof (p as Point).x === "number" && typeof (p as Point).y === "number")
     ) {
-      return { kind: "draw", points: parsed.points };
+      return { kind: "draw", points: parsed.points as Point[] };
     }
-  } catch {
-    return null;
-  }
-
+  } catch { /* ignore */ }
   return null;
 }
 
 function pointsToPath(points: Point[]) {
-  if (points.length === 0) {
-    return "";
-  }
-
+  if (points.length === 0) return "";
   const [first, ...rest] = points;
-  return `M ${first.x} ${first.y} ${rest.map((point) => `L ${point.x} ${point.y}`).join(" ")}`;
+  return `M ${first.x} ${first.y} ${rest.map((p) => `L ${p.x} ${p.y}`).join(" ")}`;
 }
+
+// Draw stroke colors — RED for clarity (Update 3)
+const DRAW_COLOR = "#ef4444";
+const DRAW_COLOR_SELECTED = "#f87171";
 
 export function IframeOverlay({
   targetUrl,
@@ -127,7 +106,7 @@ export function IframeOverlay({
   onCreateAnnotation,
   onUpdateComment,
   onDeleteAnnotation,
-  onSelectAnnotation
+  onSelectAnnotation,
 }: IframeOverlayProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const captureLayerRef = useRef<HTMLDivElement | null>(null);
@@ -139,103 +118,64 @@ export function IframeOverlay({
   const [pendingComment, setPendingComment] = useState<PendingComment | null>(null);
   const [savingComment, setSavingComment] = useState(false);
 
+  // Scroll tracking
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       const data = event.data;
-      if (
-        data &&
-        typeof data === "object" &&
-        "type" in data &&
-        (data as { type?: string }).type === "smashforms-scroll" &&
-        "scrollY" in data &&
-        typeof (data as { scrollY?: number }).scrollY === "number"
-      ) {
+      if (data && typeof data === "object" && (data as { type?: string }).type === "smashforms-scroll" && typeof (data as { scrollY?: number }).scrollY === "number") {
         setCurrentScrollY((data as { scrollY: number }).scrollY);
       }
     };
-
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, []);
 
   useEffect(() => {
     const iframe = iframeRef.current;
-    if (!iframe) {
-      return;
-    }
-
-    let cleanupScrollListener: (() => void) | null = null;
-
-    const bindScrollTracking = () => {
-      cleanupScrollListener?.();
-      cleanupScrollListener = null;
-
-      const frameWindow = iframe.contentWindow;
-      if (!frameWindow) {
-        return;
-      }
-
+    if (!iframe) return;
+    let cleanup: (() => void) | null = null;
+    const bind = () => {
+      cleanup?.();
+      cleanup = null;
+      const fw = iframe.contentWindow;
+      if (!fw) return;
       try {
-        const syncScroll = () => {
-          try {
-            setCurrentScrollY(frameWindow.scrollY ?? 0);
-          } catch {
-            // Ignore cross-origin frame access errors.
-          }
-        };
-        syncScroll();
-        frameWindow.addEventListener("scroll", syncScroll, { passive: true });
-        cleanupScrollListener = () => frameWindow.removeEventListener("scroll", syncScroll);
-      } catch {
-        // Ignore cross-origin frame access errors.
-      }
+        const sync = () => { try { setCurrentScrollY(fw.scrollY ?? 0); } catch { /* cross-origin */ } };
+        sync();
+        fw.addEventListener("scroll", sync, { passive: true });
+        cleanup = () => fw.removeEventListener("scroll", sync);
+      } catch { /* cross-origin */ }
     };
-
-    iframe.addEventListener("load", bindScrollTracking);
-    return () => {
-      iframe.removeEventListener("load", bindScrollTracking);
-      cleanupScrollListener?.();
-    };
+    iframe.addEventListener("load", bind);
+    return () => { iframe.removeEventListener("load", bind); cleanup?.(); };
   }, [targetUrl]);
 
+  // Jump to annotation
   useEffect(() => {
-    if (!jumpRequest) {
-      return;
-    }
-
-    const annotation = annotations.find((item) => item.id === jumpRequest.annotationId);
-    if (!annotation) {
-      return;
-    }
-
-    try {
-      iframeRef.current?.contentWindow?.scrollTo({
-        top: annotation.scrollY,
-        behavior: "smooth"
-      });
-    } catch {
-      // Ignore cross-origin frame access errors.
-    }
+    if (!jumpRequest) return;
+    const ann = annotations.find((a) => a.id === jumpRequest.annotationId);
+    if (!ann) return;
+    try { iframeRef.current?.contentWindow?.scrollTo({ top: ann.scrollY, behavior: "smooth" }); } catch { /* cross-origin */ }
   }, [annotations, jumpRequest]);
 
   const shapeMap = useMemo(() => {
-    return annotations.reduce<Record<string, ShapeData | null>>((acc, annotation) => {
-      acc[annotation.id] = parseShapeData(annotation.elementSelector);
+    return annotations.reduce<Record<string, ShapeData | null>>((acc, a) => {
+      acc[a.id] = parseShapeData(a.elementSelector);
       return acc;
     }, {});
   }, [annotations]);
 
   const highlightPreview = highlightStart && highlightCurrent ? buildRect(highlightStart, highlightCurrent) : null;
 
+  // FIX (Update 3): Use the captureLayerRef bounding rect directly for accurate coords
   const getPointFromEvent = (event: React.PointerEvent<HTMLDivElement>): Point | null => {
-    const bounds = captureLayerRef.current?.getBoundingClientRect();
-    if (!bounds || bounds.width === 0 || bounds.height === 0) {
-      return null;
-    }
-
+    const el = captureLayerRef.current;
+    if (!el) return null;
+    const bounds = el.getBoundingClientRect();
+    if (bounds.width === 0 || bounds.height === 0) return null;
     return {
       x: clampPercent(((event.clientX - bounds.left) / bounds.width) * 100),
-      y: clampPercent(((event.clientY - bounds.top) / bounds.height) * 100)
+      y: clampPercent(((event.clientY - bounds.top) / bounds.height) * 100),
     };
   };
 
@@ -243,40 +183,27 @@ export function IframeOverlay({
     const bounds = captureLayerRef.current?.getBoundingClientRect();
     return {
       viewportWidth: Math.round(bounds?.width ?? 0) || 1,
-      viewportHeight: Math.round(bounds?.height ?? 0) || 1
+      viewportHeight: Math.round(bounds?.height ?? 0) || 1,
     };
   };
 
   const completeDrawAnnotation = async (points: Point[]) => {
-    if (points.length < 2) {
-      return;
-    }
-
+    if (points.length < 2) return;
     const { viewportWidth, viewportHeight } = getViewportMeta();
-    const firstPoint = points[0];
     const created = await onCreateAnnotation({
       type: "DRAW",
-      positionX: firstPoint.x,
-      positionY: firstPoint.y,
+      positionX: points[0].x,
+      positionY: points[0].y,
       scrollY: currentScrollY,
       viewportWidth,
       viewportHeight,
-      elementSelector: JSON.stringify({
-        kind: "draw",
-        points
-      })
+      elementSelector: JSON.stringify({ kind: "draw", points }),
     });
-
-    if (created) {
-      onSelectAnnotation(created.id);
-    }
+    if (created) onSelectAnnotation(created.id);
   };
 
   const completeHighlightAnnotation = async (rect: HighlightShape) => {
-    if (rect.width < 0.6 || rect.height < 0.6) {
-      return;
-    }
-
+    if (rect.width < 0.6 || rect.height < 0.6) return;
     const { viewportWidth, viewportHeight } = getViewportMeta();
     const created = await onCreateAnnotation({
       type: "HIGHLIGHT",
@@ -285,12 +212,9 @@ export function IframeOverlay({
       scrollY: currentScrollY,
       viewportWidth,
       viewportHeight,
-      elementSelector: JSON.stringify(rect)
+      elementSelector: JSON.stringify(rect),
     });
-
-    if (created) {
-      onSelectAnnotation(created.id);
-    }
+    if (created) onSelectAnnotation(created.id);
   };
 
   const completePinAnnotation = async (point: Point) => {
@@ -301,139 +225,90 @@ export function IframeOverlay({
       positionY: point.y,
       scrollY: currentScrollY,
       viewportWidth,
-      viewportHeight
+      viewportHeight,
     });
-
-    if (!created) {
-      return;
-    }
-
+    if (!created) return;
     onSelectAnnotation(created.id);
-    setPendingComment({
-      annotationId: created.id,
-      x: point.x,
-      y: point.y,
-      initialComment: created.comment ?? ""
-    });
+    setPendingComment({ annotationId: created.id, x: point.x, y: point.y, initialComment: created.comment ?? "" });
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (activeTool === "none" || event.button !== 0) {
-      return;
-    }
-
+    if (activeTool === "none" || event.button !== 0) return;
     const point = getPointFromEvent(event);
-    if (!point) {
-      return;
-    }
-
+    if (!point) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     setActivePointerId(event.pointerId);
-
     if (activeTool === "pin") {
       void completePinAnnotation(point);
       setActivePointerId(null);
       event.currentTarget.releasePointerCapture(event.pointerId);
       return;
     }
-
-    if (activeTool === "highlight") {
-      setHighlightStart(point);
-      setHighlightCurrent(point);
-      return;
-    }
-
-    if (activeTool === "draw") {
-      setDrawPoints([point]);
-    }
+    if (activeTool === "highlight") { setHighlightStart(point); setHighlightCurrent(point); return; }
+    if (activeTool === "draw") { setDrawPoints([point]); }
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (activePointerId === null || activePointerId !== event.pointerId) {
-      return;
-    }
-
+    if (activePointerId === null || activePointerId !== event.pointerId) return;
     const point = getPointFromEvent(event);
-    if (!point) {
-      return;
-    }
-
-    if (activeTool === "highlight") {
-      setHighlightCurrent(point);
-      return;
-    }
-
+    if (!point) return;
+    if (activeTool === "highlight") { setHighlightCurrent(point); return; }
     if (activeTool === "draw") {
-      setDrawPoints((previous) => {
-        const lastPoint = previous[previous.length - 1];
-        if (!lastPoint) {
-          return [point];
-        }
-        const distance = Math.abs(lastPoint.x - point.x) + Math.abs(lastPoint.y - point.y);
-        if (distance < 0.2) {
-          return previous;
-        }
-        return [...previous, point];
+      setDrawPoints((prev) => {
+        const last = prev[prev.length - 1];
+        if (!last) return [point];
+        if (Math.abs(last.x - point.x) + Math.abs(last.y - point.y) < 0.2) return prev;
+        return [...prev, point];
       });
     }
   };
 
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (activePointerId === null || activePointerId !== event.pointerId) {
-      return;
-    }
-
+    if (activePointerId === null || activePointerId !== event.pointerId) return;
     if (activeTool === "highlight" && highlightStart && highlightCurrent) {
-      const rect = buildRect(highlightStart, highlightCurrent);
-      void completeHighlightAnnotation(rect);
+      void completeHighlightAnnotation(buildRect(highlightStart, highlightCurrent));
     }
-
     if (activeTool === "draw" && drawPoints.length > 1) {
       void completeDrawAnnotation(drawPoints);
     }
-
-    setHighlightStart(null);
-    setHighlightCurrent(null);
-    setDrawPoints([]);
-    setActivePointerId(null);
-
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
+    setHighlightStart(null); setHighlightCurrent(null); setDrawPoints([]); setActivePointerId(null);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
 
   const handleCancelComment = async () => {
-    if (!pendingComment) {
-      return;
-    }
-
-    const annotationId = pendingComment.annotationId;
+    if (!pendingComment) return;
+    const id = pendingComment.annotationId;
     setPendingComment(null);
-    try {
-      await onDeleteAnnotation(annotationId);
-    } catch (error) {
-      console.error("Failed to cancel annotation comment", error);
-    }
+    try { await onDeleteAnnotation(id); } catch (e) { console.error(e); }
   };
 
   const handleSaveComment = async (comment: string) => {
-    if (!pendingComment) {
-      return;
-    }
-
+    if (!pendingComment) return;
     setSavingComment(true);
     try {
-      await onUpdateComment(pendingComment.annotationId, comment.trim() ? comment.trim() : null);
+      await onUpdateComment(pendingComment.annotationId, comment.trim() || null);
       setPendingComment(null);
-    } catch (error) {
-      console.error("Failed to save annotation comment", error);
-    } finally {
-      setSavingComment(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setSavingComment(false); }
   };
+
+  // Update 6: Compute current section index from scrollY
+  const viewportHeight = captureLayerRef.current?.getBoundingClientRect().height || 900;
+  const currentSection = Math.floor(currentScrollY / viewportHeight);
+
+  // Filter visible annotations: show annotations whose scrollY falls within +/- half a viewport of current scroll
+  const visibleAnnotations = annotations.filter((a) => {
+    const sectionDiff = Math.abs(a.scrollY - currentScrollY);
+    return sectionDiff < viewportHeight * 0.75;
+  });
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-black">
+      {/* Section indicator (Update 6) */}
+      <div className="absolute left-3 top-3 z-50 rounded-lg bg-zinc-900/80 px-2 py-1 text-xs text-zinc-400 backdrop-blur-sm">
+        Section {currentSection + 1}
+      </div>
+
       <iframe
         ref={iframeRef}
         src={targetUrl}
@@ -442,17 +317,12 @@ export function IframeOverlay({
         sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
       />
 
+      {/* Shape overlays */}
       <div className="pointer-events-none absolute inset-0 z-20">
-        {annotations.map((annotation) => {
-          if (annotation.type !== "HIGHLIGHT") {
-            return null;
-          }
-
+        {visibleAnnotations.map((annotation) => {
+          if (annotation.type !== "HIGHLIGHT") return null;
           const shape = shapeMap[annotation.id];
-          if (!shape || shape.kind !== "highlight") {
-            return null;
-          }
-
+          if (!shape || shape.kind !== "highlight") return null;
           return (
             <div
               key={annotation.id}
@@ -460,72 +330,59 @@ export function IframeOverlay({
                 "absolute border border-yellow-300/80 bg-yellow-200/30",
                 selectedAnnotationId === annotation.id && "border-violet-300"
               )}
-              style={{
-                left: `${shape.x}%`,
-                top: `${shape.y}%`,
-                width: `${shape.width}%`,
-                height: `${shape.height}%`
-              }}
+              style={{ left: `${shape.x}%`, top: `${shape.y}%`, width: `${shape.width}%`, height: `${shape.height}%` }}
             />
           );
         })}
 
-        {annotations.map((annotation) => {
-          if (annotation.type !== "DRAW") {
-            return null;
-          }
-
+        {/* Draw annotations — RED (Update 3) */}
+        {visibleAnnotations.map((annotation) => {
+          if (annotation.type !== "DRAW") return null;
           const shape = shapeMap[annotation.id];
-          if (!shape || shape.kind !== "draw" || shape.points.length < 2) {
-            return null;
-          }
-
+          if (!shape || shape.kind !== "draw" || shape.points.length < 2) return null;
           return (
-            <svg key={annotation.id} className="absolute inset-0 h-full w-full" viewBox="0 0 100 100">
+            <svg key={annotation.id} className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
               <path
                 d={pointsToPath(shape.points)}
                 fill="none"
-                stroke={selectedAnnotationId === annotation.id ? "#c4b5fd" : "#f5d0fe"}
+                stroke={selectedAnnotationId === annotation.id ? DRAW_COLOR_SELECTED : DRAW_COLOR}
                 strokeWidth={0.45}
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
               />
             </svg>
           );
         })}
 
-        {highlightPreview ? (
+        {/* Highlight preview */}
+        {highlightPreview && (
           <div
             className="absolute border border-yellow-200/70 bg-yellow-100/25"
-            style={{
-              left: `${highlightPreview.x}%`,
-              top: `${highlightPreview.y}%`,
-              width: `${highlightPreview.width}%`,
-              height: `${highlightPreview.height}%`
-            }}
+            style={{ left: `${highlightPreview.x}%`, top: `${highlightPreview.y}%`, width: `${highlightPreview.width}%`, height: `${highlightPreview.height}%` }}
           />
-        ) : null}
+        )}
 
-        {drawPoints.length > 1 ? (
-          <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100">
+        {/* Draw preview — RED (Update 3) */}
+        {drawPoints.length > 1 && (
+          <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
             <path
               d={pointsToPath(drawPoints)}
               fill="none"
-              stroke="#ddd6fe"
+              stroke={DRAW_COLOR}
               strokeWidth={0.45}
               strokeLinecap="round"
               strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
             />
           </svg>
-        ) : null}
+        )}
       </div>
 
+      {/* Pin markers — only visible ones (Update 6) */}
       <div className="pointer-events-none absolute inset-0 z-30">
-        {annotations.map((annotation, index) => {
-          if (annotation.type !== "PIN") {
-            return null;
-          }
-
+        {visibleAnnotations.map((annotation, index) => {
+          if (annotation.type !== "PIN") return null;
           return (
             <PinMarker
               key={annotation.id}
@@ -540,6 +397,7 @@ export function IframeOverlay({
         })}
       </div>
 
+      {/* Capture layer */}
       <div
         ref={captureLayerRef}
         className={cn(

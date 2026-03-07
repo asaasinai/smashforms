@@ -1,4 +1,4 @@
-import { ReviewStatus } from "@/generated/prisma/enums";
+import { ReviewStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { fetchRepoContext } from "@/lib/vercel-context";
 import { NextResponse } from "next/server";

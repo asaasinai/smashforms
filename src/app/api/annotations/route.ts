@@ -1,4 +1,4 @@
-import { AnnotationType } from "@/generated/prisma/enums";
+import { AnnotationType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";

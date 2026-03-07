@@ -1,4 +1,4 @@
-import { ReviewStatus } from "@/generated/prisma/enums";
+import { ReviewStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
